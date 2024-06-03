@@ -1,0 +1,129 @@
+%flink.ssql(jobName="kafka_to_kafka_sasl")
+
+
+drop table if exists source;
+CREATE TABLE source (
+	ID integer NOT NULL,
+	ClassDate STRING NULL,
+	OrganizeCode STRING NULL,
+	lineid integer NULL,
+	ClassId integer NULL,
+	EquipNo integer NULL,
+	ZongtouruTime double NULL,
+	DangjiTime double NULL,
+	xiuxitime double NULL,
+	JhTingjiTime double NULL,
+	fuheTime double NULL,
+	JiadongTime double NULL,
+	mQty integer NULL,
+	mrate double NULL,
+	passqty integer NULL,
+	TimeJdl numeric(9,4) NULL,
+	PassqtyLv numeric(9,4) NULL,
+	XingnengJdl numeric(9,4) NULL,
+	OEE1 numeric(9,4) NULL,
+	OEE numeric(9,4) NULL,
+	frate double NULL,
+	TargetQty integer NULL,
+	EqID integer NULL,
+	EqSate integer NULL,
+	dDate STRING NULL,
+	WorkTime double NULL,
+	FaultTime double NULL,
+	WaitTime double NULL,
+	ShaltTime double NULL,
+	planProduce integer NULL,
+	yieldRate numeric(9,4) NULL,
+	badnessQty integer NULL,
+	Errorcode varchar NULL,
+	TT numeric(9,4) NULL,
+	InputQty integer NULL,
+	MoldErrorCode varchar NULL,
+	PRODUCTID varchar NULL,
+	MouldNo varchar NULL,
+	DCLMb double NULL,
+	SJLMb double NULL,
+	LVMb double NULL,
+	XLMb double NULL,
+	OperatorNo varchar NULL,
+	Message varchar NULL,
+	BTBA integer NULL,
+	WorkOrder varchar NULL
+) WITH (
+  'connector' = 'kafka',
+  'topic' = 'scada-tj_oee',
+  'properties.bootstrap.servers' = 'kafka-service:9092',
+  'properties.group.id' = 'sasl-test',
+  'scan.startup.mode' = 'group-offsets',
+  'format' = 'json'
+  --'json.timestamp-format.standard' = 'ISO-8601'
+);
+
+
+drop table if exists destination;
+create table destination (
+    ID integer NOT NULL,
+	ClassDate STRING NULL,
+	OrganizeCode STRING NULL,
+	lineid integer NULL,
+	ClassId integer NULL,
+	EquipNo integer NULL,
+	ZongtouruTime double NULL,
+	DangjiTime double NULL,
+	xiuxitime double NULL,
+	JhTingjiTime double NULL,
+	fuheTime double NULL,
+	JiadongTime double NULL,
+	mQty integer NULL,
+	mrate double NULL,
+	passqty integer NULL,
+	TimeJdl numeric(9,4) NULL,
+	PassqtyLv numeric(9,4) NULL,
+	XingnengJdl numeric(9,4) NULL,
+	OEE1 numeric(9,4) NULL,
+	OEE numeric(9,4) NULL,
+	frate double NULL,
+	TargetQty integer NULL,
+	EqID integer NULL,
+	EqSate integer NULL,
+	dDate STRING NULL,
+	WorkTime double NULL,
+	FaultTime double NULL,
+	WaitTime double NULL,
+	ShaltTime double NULL,
+	planProduce integer NULL,
+	yieldRate numeric(9,4) NULL,
+	badnessQty integer NULL,
+	Errorcode varchar NULL,
+	TT numeric(9,4) NULL,
+	InputQty integer NULL,
+	MoldErrorCode varchar NULL,
+	PRODUCTID varchar NULL,
+	MouldNo varchar NULL,
+	DCLMb double NULL,
+	SJLMb double NULL,
+	LVMb double NULL,
+	XLMb double NULL,
+	OperatorNo varchar NULL,
+	Message varchar NULL,
+	BTBA integer NULL,
+	WorkOrder varchar NULL
+) WITH (
+  'connector' = 'kafka',
+  'topic' = 'test_tj_oee',
+  'properties.bootstrap.servers' = 'broker:9092',
+  'properties.security.protocol' = 'SASL_PLAINTEXT',
+  'properties.sasl.mechanism' = 'SCRAM-SHA-256',
+  'properties.sasl.jaas.config' = 'org.apache.flink.kafka.shaded.org.apache.kafka.common.security.scram.ScramLoginModule required username="usera" password="usera";',
+  'format' = 'json'
+  --'json.ignore-parse-errors' = 'true'
+  --'json.timestamp-format.standard' = 'ISO-8601'
+);
+
+
+
+insert into destination
+select * from source;
+
+--select * from source;
+--select count(*) from destination;

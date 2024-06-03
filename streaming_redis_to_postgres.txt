@@ -1,0 +1,72 @@
+%flink.ssql(jobName="ems_redis_EqErrorTime")
+
+drop table if exists source;
+CREATE TABLE source (
+    --no ID in Redis data
+    EQID int,
+    OrganizeCode STRING,
+    EquipNo int,
+    LineId int,
+    ClassId int,    
+    DDATE STRING,
+    EqErrorCodeId STRING,
+    EqErrorName STRING,
+    StartTime STRING,
+    EndTime STRING,
+    InterValTime double,
+    IsEnd boolean,
+    EqStateCode int,
+    UDate STRING,
+    --belows exits in DB but NOT in Redis
+    EqStateRemark STRING,
+    UpId STRING,
+    OgCode STRING,
+    WorkID int
+) WITH (
+    'connector' = 'redis', 
+    'host' = '10.98.5.146',
+    'port' = '6901',
+    'password' = 'fit!22054',
+    'channel' = 'EqErrorTime'
+);
+
+--select LineId, ClassId, EquipNo, EqErrorCodeId, EqErrorName, TIMESTAMPADD(HOUR, -8, TO_TIMESTAMP(StartTime)) StartTime, TIMESTAMPADD(HOUR, -8, TO_TIMESTAMP(EndTime)) EndTime, EqStateRemark, TO_DATE(DDATE), OrganizeCode, InterValTime, EQID, EqStateCode, UpId, TIMESTAMPADD(HOUR, -8, TO_TIMESTAMP(replace(replace(UDate, 'T', ' '), '+08:00' ,'' ))), OgCode, IsEnd, WorkID, UDate, now()  from source
+--select * from source;
+
+
+drop table if exists destination;
+create table destination (
+	lineid int NULL,
+	classid int NULL,
+	equipno varchar NOT NULL,
+	eqerrorcodeid varchar NULL,
+	eqerrorname varchar NULL,
+	starttime timestamp NULL,
+	endtime timestamp NULL,
+	eqstateremark varchar NULL,
+	ddate date NULL,
+	organizecode varchar NULL,
+	intervaltime double NULL,
+	eqid int NULL,
+	eqstatecode int NULL,
+	upid varchar NULL,
+	udate timestamp NULL,
+	ogcode varchar NULL,
+	isend boolean NULL,
+	workid int NULL,
+	--udate_string STRING,
+	--update_time timestamp,
+	primary key (eqid, eqerrorcodeid, starttime) not enforced
+) with (
+   'connector' = 'jdbc'
+   ,'url' = 'jdbc:postgresql://dmp-postgres-31100.ems-default:5432/ods'
+   ,'table-name' = 'scada.eqerrortime'
+   ,'username' = 'admin'
+   ,'password' = 'admin'
+);
+
+
+insert into destination(lineid, classid, equipno, eqerrorcodeid, eqerrorname, starttime, endtime, eqstateremark, ddate, organizecode, intervaltime, eqid, eqstatecode, upid, udate, ogcode, isend, workid) 
+select LineId, ClassId, cast(EquipNo as varchar), EqErrorCodeId, EqErrorName, TO_TIMESTAMP(StartTime) StartTime, TO_TIMESTAMP(EndTime) EndTime, EqStateRemark, TO_DATE(DDATE), OrganizeCode, InterValTime, EQID, EqStateCode, UpId, TO_TIMESTAMP(replace(replace(UDate, 'T', ' '), '+08:00' ,'' )), OgCode, IsEnd, WorkID from source
+
+--select LineId, ClassId, cast(EquipNo as varchar), EqErrorCodeId, EqErrorName, TIMESTAMPADD(HOUR, -8, TO_TIMESTAMP(StartTime)) StartTime, TIMESTAMPADD(HOUR, -8, TO_TIMESTAMP(EndTime)) EndTime, EqStateRemark, TO_DATE(DDATE), OrganizeCode, InterValTime, EQID, EqStateCode, UpId, TIMESTAMPADD(HOUR, -8, TO_TIMESTAMP(replace(replace(UDate, 'T', ' '), '+08:00' ,'' ))), OgCode, IsEnd, WorkID, UDate, now()  from source;

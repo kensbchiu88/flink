@@ -1,0 +1,121 @@
+%flink
+
+//import org.apache.flink.api.common.functions.MapFunction
+//import org.apache.flink.table.api._
+//import org.apache.flink.table.api.bridge.scala._
+//import org.apache.flink.types.Row
+import javax.mail._
+import javax.mail.internet._
+import java.util.Properties
+
+/** 定義變數 */
+val jobName = "cdc_tj_quality"
+val smtpHost = "10.35.7.5"
+val smtpPort = "25"
+val recipient = "ken.sp.chiu@fit-foxconn.com"
+val emailSubject = "Exception occurred in " + jobName
+
+/** 寄送郵件的函數 */
+def sendEmail(to: String, subject: String, body: String): Unit = {
+  val props = new Properties()
+  props.put("mail.smtp.host", smtpHost)
+  props.put("mail.smtp.port", smtpPort)
+
+  val session = Session.getInstance(props, null)
+
+  val message = new MimeMessage(session)
+  message.setFrom(new InternetAddress(to))
+  message.addRecipient(Message.RecipientType.TO, new InternetAddress(to))
+  message.setSubject(subject)
+  message.setText(body)
+
+  Transport.send(message)
+
+  println("郵件已成功發送。")
+}
+
+val create_destination_ddl = """
+create table destination (
+    id int NOT NULL,
+	name varchar NULL,
+	primary key (id) not enforced
+) with (
+   'connector' = 'jdbc'
+   ,'url' = 'jdbc:postgresql://dmp-postgres-31100:5432/ods'
+   ,'table-name' = 'log.test'
+   ,'username' = 'admin'
+   ,'password' = 'admin'
+)
+
+"""
+
+val configuration = btenv.getConfig().getConfiguration()
+configuration.setString("pipeline.name", "test_try_catch")
+
+btenv.executeSql("drop table if exists destination")
+//val create_table = "create table destination (id int NOT NULL, name varchar NULL, primary key (id) not enforced ) with ( 'connector' = 'jdbc' ,'url' = 'jdbc:postgresql://dmp-postgres-31100:5432/ods' ,'table-name' = 'log.test' ,'username' = 'admin' ,'password' = 'admin')"
+
+btenv.executeSql(create_destination_ddl)
+
+/*
+create table destination (
+    id int NOT NULL,
+	name varchar NULL,
+	primary key (id) not enforced
+) with (
+   'connector' = 'jdbc'
+   ,'url' = 'jdbc:postgresql://dmp-postgres-31100:5432/ods'
+   ,'table-name' = 'log.test'
+   ,'username' = 'admin'
+   ,'password' = 'admin'
+);
+*/
+
+//val result = btenv.executeSql("select * from destination")
+//z.show(result)
+//btenv.executeSql("insert into destination values(1, '1')")
+
+
+try {
+    btenv.executeSql("insert into destination values('1', '1')")
+} catch {
+    case e:Exception=> {
+        sendEmail(recipient, emailSubject, e.getMessage)
+        e.printStackTrace()
+        //println("郵件發送ing")
+    }
+}
+
+
+
+/*
+// 寄送郵件的函數
+def sendEmail(to: String, subject: String, body: String): Unit = {
+  val host = "10.35.7.5"
+  val port = "25"
+  //val username = "your_username"
+  //val password = "your_password"
+
+  val props = new Properties()
+  props.put("mail.smtp.auth", "false")
+  props.put("mail.smtp.starttls.enable", "false")
+  props.put("mail.smtp.host", host)
+  props.put("mail.smtp.port", port)
+
+  val session = Session.getInstance(props, new Authenticator() {
+    protected override def getPasswordAuthentication(): PasswordAuthentication = {
+      new PasswordAuthentication(username, password)
+    }
+  })
+
+  val message = new MimeMessage(session)
+  message.setFrom(new InternetAddress(username))
+  message.addRecipient(Message.RecipientType.TO, new InternetAddress(to))
+  message.setSubject(subject)
+  message.setText(body)
+
+  Transport.send(message)
+
+  println("郵件已成功發送。")
+}
+*/

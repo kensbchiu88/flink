@@ -1,0 +1,40 @@
+%flink
+
+import org.apache.flink.streaming.connectors.rabbitmq.common.RMQConnectionConfig;
+import org.apache.flink.streaming.connectors.rabbitmq.RMQSource;
+import org.apache.flink.streaming.util.serialization.SimpleStringSchema;
+import org.apache.flink.streaming.connectors.rabbitmq.RMQSink;
+
+senv.enableCheckpointing(100000);
+
+val connectionConfig = new RMQConnectionConfig.Builder()
+    .setHost("dmp-rabbitmq-30200-app")
+    .setPort(5672)
+    .setVirtualHost("/")
+    .setUserName("admin")
+    .setPassword("admin")
+    .build();
+    
+val stream = senv
+    .addSource(new RMQSource[String](
+        connectionConfig,            // config for the RabbitMQ connection
+        "mqtt-test",                 // name of the RabbitMQ queue to consume
+        false,                        // use correlation ids; can be false if only at-least-once is required
+        new SimpleStringSchema))     // deserialization schema to turn messages into Java objects
+    .setParallelism(1)               // non-parallel source is only required for exactly-once
+
+
+val inputTable = stenv.fromDataStream(stream)
+
+z.show(inputTable, streamType="update")
+//stream.print()
+ 
+
+stream.addSink(new RMQSink[String](
+        connectionConfig,            // config for the RabbitMQ connection
+        "test-sink",                 // name of the RabbitMQ queue to consume
+        new SimpleStringSchema))
+
+
+senv.execute("rabbitmq source test");
+

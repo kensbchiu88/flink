@@ -1,0 +1,315 @@
+%flink(jobName="ems_dwd_tj_oee_history")
+
+import org.apache.flink.api.common.typeinfo.BasicTypeInfo
+import org.apache.flink.api.java.typeutils.RowTypeInfo
+import org.apache.flink.connector.jdbc.JdbcInputFormat
+import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment, createTypeInformation}
+import org.apache.flink.types.Row
+import org.apache.flink.table.runtime.typeutils.TimestampDataTypeInfo
+import java.sql.Timestamp
+import org.apache.flink.api.common.typeinfo.TypeInformation
+import java.time.{ZoneId, ZonedDateTime, LocalDate, LocalTime, LocalDateTime}
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+
+
+val timeZone = ZoneId.of("Asia/Taipei")
+val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+val timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+
+/**
+ * Main
+ */ 
+val startDate = LocalDate.of(2023, 7, 1)
+val endDate = LocalDate.of(2023, 7, 31)
+
+var currentDate = startDate
+  while (!currentDate.isAfter(endDate)) {
+    insert_tj_oee_history(currentDate.format(dateFormatter), 1)
+    insert_tj_oee_history(currentDate.format(dateFormatter), 2)
+    currentDate = currentDate.plus(1, ChronoUnit.DAYS)
+  }
+
+/**
+ * insert tj_oee
+ */ 
+def insert_tj_oee_history(shitDate: String, shiftId: Int): Unit = {
+    var logFilterTime = ""
+    val localDate = LocalDate.parse(shitDate, dateFormatter)
+    if(shiftId == 1) {
+        logFilterTime = LocalDateTime.of(localDate, java.time.LocalTime.of(9, 0)).format(timeFormatter)
+    } else {
+        logFilterTime = LocalDateTime.of(localDate, java.time.LocalTime.of(21, 0)).format(timeFormatter)
+    }
+    
+    println("Shit Date: " + shitDate)
+    println("Shift Id:" + shiftId)
+    println("Log Filter Time:" + logFilterTime)
+    
+    /**
+     * 定義資料來源: tj_oee log中最後一筆 mQty>0 的 EqID與dDate
+    */ 
+    val sql = s"""
+    select e1."ClassDate", e1."ClassId", e1."EqID", max(e1."dDate") "dDate"
+      from log."Scada_Tj_OEE" e1 
+      where e1."ClassDate" = '$shitDate'
+        and e1."mQty" > 0
+        and e1."ClassId" = $shiftId
+        and e1."dDate" >= '$logFilterTime'
+        group by e1."ClassDate", e1."ClassId", e1."EqID"
+    """.stripMargin
+    
+    println("sql: " + sql)
+
+
+    val inputStream:DataStream[Row] = senv.createInput(JdbcInputFormat.buildJdbcInputFormat()
+      .setDrivername("org.postgresql.Driver")
+      .setDBUrl("jdbc:postgresql://dmp-postgres-31100.ems-default:5432/ods")
+      .setUsername("admin")
+      .setPassword("admin")
+      .setQuery(sql)
+      .setRowTypeInfo(new RowTypeInfo(
+        TypeInformation.of(classOf[java.sql.Date]),
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        TypeInformation.of(classOf[Timestamp]) ))
+      .finish())
+    
+    stenv.dropTemporaryView("non_zero_log")
+    stenv.createTemporaryView("non_zero_log", inputStream, $"ClassDate", $"ClassId", $"EqID" , $"dDate")
+
+
+    /**
+     * 定義資料來源log."Scada_Tj_OEE"
+     */ 
+    val tj_oee_log_ddl = s"""
+    SELECT "ID", "ClassDate", "OrganizeCode", lineid, "ClassId", "EquipNo", "ZongtouruTime", "DangjiTime", xiuxitime, "JhTingjiTime", "fuheTime", "JiadongTime", "mQty", mrate, passqty, "TimeJdl", "PassqtyLv", "XingnengJdl", "OEE1", "OEE", frate, "TargetQty", "EqID", "EqSate", "dDate", "WorkTime", "FaultTime", "WaitTime", "ShaltTime", "planProduce", "yieldRate", "badnessQty", "Errorcode", "TT", "InputQty", "MoldErrorCode", "PRODUCTID", "MouldNo", "DCLMb", "SJLMb", "LVMb", "XLMb", "OperatorNo", "Message", "BTBA", "WorkOrder", "IsOutput"
+    FROM log."Scada_Tj_OEE"
+    WHERE "ClassDate" = '$shitDate'
+      AND "ClassId" = $shiftId
+      AND "mQty" > 0
+    """
+    
+    println("tj_oee_log_ddl:" + tj_oee_log_ddl)
+    
+    val logInputStream:DataStream[Row] = senv.createInput(JdbcInputFormat.buildJdbcInputFormat()
+      .setDrivername("org.postgresql.Driver")
+      .setDBUrl("jdbc:postgresql://dmp-postgres-31100.ems-default:5432/ods")
+      .setUsername("admin")
+      .setPassword("admin")
+      .setQuery(tj_oee_log_ddl)
+      .setRowTypeInfo(new RowTypeInfo(
+        BasicTypeInfo.INT_TYPE_INFO,
+        TypeInformation.of(classOf[java.sql.Date]),
+        BasicTypeInfo.STRING_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        TypeInformation.of(classOf[java.math.BigDecimal]),
+        TypeInformation.of(classOf[java.math.BigDecimal]),
+        TypeInformation.of(classOf[java.math.BigDecimal]),
+        TypeInformation.of(classOf[java.math.BigDecimal]),
+        TypeInformation.of(classOf[java.math.BigDecimal]),
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        TypeInformation.of(classOf[Timestamp]),
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        TypeInformation.of(classOf[java.math.BigDecimal]),
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.STRING_TYPE_INFO,
+        TypeInformation.of(classOf[java.math.BigDecimal]),
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.STRING_TYPE_INFO,
+        BasicTypeInfo.STRING_TYPE_INFO,
+        BasicTypeInfo.STRING_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.DOUBLE_TYPE_INFO,
+        BasicTypeInfo.STRING_TYPE_INFO,
+        BasicTypeInfo.STRING_TYPE_INFO,
+        BasicTypeInfo.INT_TYPE_INFO,
+        BasicTypeInfo.STRING_TYPE_INFO,
+        BasicTypeInfo.BOOLEAN_TYPE_INFO     
+        ))
+      .finish())
+      
+      stenv.dropTemporaryView("tj_oee_log")
+      stenv.createTemporaryView("tj_oee_log", logInputStream, $"ID", $"ClassDate", $"OrganizeCode", $"lineid", $"ClassId", $"EquipNo", $"ZongtouruTime", $"DangjiTime", $"xiuxitime", $"JhTingjiTime", $"fuheTime", $"JiadongTime", $"mQty", $"mrate", $"passqty", $"TimeJdl", $"PassqtyLv", $"XingnengJdl", $"OEE1", $"OEE", $"frate", $"TargetQty", $"EqID", $"EqSate", $"dDate", $"WorkTime", $"FaultTime", $"WaitTime", $"ShaltTime", $"planProduce", $"yieldRate", $"badnessQty", $"Errorcode", $"TT", $"InputQty", $"MoldErrorCode", $"PRODUCTID", $"MouldNo", $"DCLMb", $"SJLMb", $"LVMb", $"XLMb", $"OperatorNo", $"Message", $"BTBA", $"WorkOrder", $"IsOutput")
+
+
+    /**
+    * 定義資料來源scada."Tj_OEE"
+    */ 
+    val tj_oee_ddl = s"""
+    SELECT "ID", "ClassDate", "OrganizeCode", lineid, "ClassId", "EquipNo", "ZongtouruTime", "DangjiTime", xiuxitime, "JhTingjiTime", "fuheTime", "JiadongTime", "mQty", mrate, passqty, "TimeJdl", "PassqtyLv", "XingnengJdl", "OEE1", "OEE", frate, "TargetQty", "EqID", "EqSate", "dDate", "WorkTime", "FaultTime", "WaitTime", "ShaltTime", "planProduce", "yieldRate", "badnessQty", "Errorcode", "TT", "InputQty", "MoldErrorCode", "PRODUCTID", "MouldNo", "DCLMb", "SJLMb", "LVMb", "XLMb", "OperatorNo", "Message", "BTBA", "WorkOrder", "IsOutput"
+    FROM scada."Tj_OEE"
+    WHERE "ClassDate" = '$shitDate'
+    AND "ClassId" = $shiftId
+    """
+    
+    println("tj_oee_ddl:" + tj_oee_ddl)
+    
+    val oeeInputStream:DataStream[Row] = senv.createInput(JdbcInputFormat.buildJdbcInputFormat()
+    .setDrivername("org.postgresql.Driver")
+    .setDBUrl("jdbc:postgresql://dmp-postgres-31100.ems-default:5432/ods")
+    .setUsername("admin")
+    .setPassword("admin")
+    .setQuery(tj_oee_ddl)
+    .setRowTypeInfo(new RowTypeInfo(
+    BasicTypeInfo.INT_TYPE_INFO,
+    TypeInformation.of(classOf[java.sql.Date]),
+    BasicTypeInfo.STRING_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    TypeInformation.of(classOf[java.math.BigDecimal]),
+    TypeInformation.of(classOf[java.math.BigDecimal]),
+    TypeInformation.of(classOf[java.math.BigDecimal]),
+    TypeInformation.of(classOf[java.math.BigDecimal]),
+    TypeInformation.of(classOf[java.math.BigDecimal]),
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    TypeInformation.of(classOf[Timestamp]),
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    TypeInformation.of(classOf[java.math.BigDecimal]),
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.STRING_TYPE_INFO,
+    TypeInformation.of(classOf[java.math.BigDecimal]),
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.STRING_TYPE_INFO,
+    BasicTypeInfo.STRING_TYPE_INFO,
+    BasicTypeInfo.STRING_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.DOUBLE_TYPE_INFO,
+    BasicTypeInfo.STRING_TYPE_INFO,
+    BasicTypeInfo.STRING_TYPE_INFO,
+    BasicTypeInfo.INT_TYPE_INFO,
+    BasicTypeInfo.STRING_TYPE_INFO,
+    BasicTypeInfo.BOOLEAN_TYPE_INFO     
+    ))
+    .finish())
+    
+    stenv.dropTemporaryView("tj_oee")
+    stenv.createTemporaryView("tj_oee", oeeInputStream, $"ID", $"ClassDate", $"OrganizeCode", $"lineid", $"ClassId", $"EquipNo", $"ZongtouruTime", $"DangjiTime", $"xiuxitime", $"JhTingjiTime", $"fuheTime", $"JiadongTime", $"mQty", $"mrate", $"passqty", $"TimeJdl", $"PassqtyLv", $"XingnengJdl", $"OEE1", $"OEE", $"frate", $"TargetQty", $"EqID", $"EqSate", $"dDate", $"WorkTime", $"FaultTime", $"WaitTime", $"ShaltTime", $"planProduce", $"yieldRate", $"badnessQty", $"Errorcode", $"TT", $"InputQty", $"MoldErrorCode", $"PRODUCTID", $"MouldNo", $"DCLMb", $"SJLMb", $"LVMb", $"XLMb", $"OperatorNo", $"Message", $"BTBA", $"WorkOrder", $"IsOutput")
+
+
+    /**
+     * 定義資料目的dwd.scada_tj_oee
+     */ 
+    val sink_ddl = """
+    create table destination (
+        source_id integer NOT NULL,
+    	shift_date date NULL,
+    	shift integer NULL,
+    	total_time double NULL,
+    	unplanned_stop_time double NULL,
+    	break_time double NULL,
+    	planned_stop_time double NULL,
+    	planned_production_time double NULL,
+    	run_time double NULL,
+    	total_count integer NULL,
+    	ideal_cycle_time double NULL,
+    	good_count integer NULL,
+    	availability numeric(9,4) NULL,
+    	quality numeric(9,4) NULL,
+    	performance numeric(9,4) NULL,
+    	oee1 numeric(9,4) NULL,
+    	oee numeric(9,4) NULL,
+    	actual_cycle_time double NULL,
+    	production_target integer NULL,
+    	equipment_id integer NULL,
+    	data_datetime timestamp NULL,
+    	net_run_time double NULL,
+    	fault_time double NULL,
+    	wait_time double NULL,
+    	shalt_time double NULL,
+    	planned_production integer NULL,
+    	achievement_rate numeric(9,4) NULL,
+    	bad_count integer NULL,
+    	input_count integer NULL,
+    	product_id varchar NULL,
+    	mould_no varchar NULL,
+    	achievement_rate_target double NULL,
+    	availability_target double NULL,
+    	quality_target double NULL,
+    	performance_target double NULL,
+        zone varchar NOT NULL,
+    	update_time timestamp NOT NULL,
+        primary key (source_id, zone) not enforced
+    ) with (
+       'connector' = 'jdbc'
+       ,'url' = 'jdbc:postgresql://dmp-postgres-30100:5432/dw'
+       ,'table-name' = 'dwd.scada_tj_oee'
+       ,'username' = 'admin'
+       ,'password' = 'admin'
+    )
+    """
+    
+    stenv.executeSql("drop table if exists destination")
+    stenv.executeSql(sink_ddl)
+
+
+    /**
+     * 將目標日期與班別的tj_oee資料寫入dwd.scada_tj_oee
+     */ 
+    val insert_sql = """
+    insert into destination(source_id, shift_date, shift, total_time, unplanned_stop_time, break_time, planned_stop_time, planned_production_time, run_time, total_count, ideal_cycle_time, good_count, availability, quality, performance, oee1, oee, actual_cycle_time, production_target, equipment_id, data_datetime, net_run_time, fault_time, wait_time, shalt_time, planned_production, achievement_rate, bad_count, input_count, product_id, mould_no, achievement_rate_target, availability_target, quality_target, performance_target, zone, update_time)
+    select ID, ClassDate,  ClassId, ZongtouruTime, DangjiTime, xiuxitime, JhTingjiTime, fuheTime, JiadongTime, mQty, mrate, passqty, TimeJdl, PassqtyLv, XingnengJdl, OEE1, OEE, frate, 
+        TargetQty, EqID, TIMESTAMPADD(HOUR, -8, dDate), WorkTime, FaultTime, WaitTime, ShaltTime, planProduce, yieldRate, badnessQty, InputQty, PRODUCTID, MouldNo, DCLMb, SJLMb, LVMb, XLMb, 'EMS', now()
+      from tj_oee
+    """
+    stenv.executeSql(insert_sql)
+
+
+    /**
+     * update資料，修正設備提早歸零問題
+     */ 
+    val update_sql = """
+    insert into destination(source_id, shift_date, shift, total_time, unplanned_stop_time, break_time, planned_stop_time, planned_production_time, run_time, total_count, ideal_cycle_time, good_count, availability, quality, performance, oee1, oee, actual_cycle_time, production_target, equipment_id, data_datetime, net_run_time, fault_time, wait_time, shalt_time, planned_production, achievement_rate, bad_count, input_count, product_id, mould_no, achievement_rate_target, availability_target, quality_target, performance_target, zone, update_time)
+    select l.ID, l.ClassDate, l.ClassId, l.ZongtouruTime, l.DangjiTime, l.xiuxitime, l.JhTingjiTime, l.fuheTime, l.JiadongTime, l.mQty, l.mrate, l.passqty, l.TimeJdl, l.PassqtyLv, l.XingnengJdl, l.OEE1, l.OEE, l.frate, 
+        l.TargetQty, l.EqID, TIMESTAMPADD(HOUR, -8, l.dDate), l.WorkTime, l.FaultTime, l.WaitTime, l.ShaltTime, l.planProduce, l.yieldRate, l.badnessQty, l.InputQty, l.PRODUCTID, l.MouldNo, l.DCLMb, l.SJLMb, l.LVMb, l.XLMb, 'EMS', now()
+      from tj_oee_log l
+     inner join non_zero_log l2 on l.EqID = l2.EqID and l.dDate = l2.dDate
+     inner join tj_oee e on l.EqID = e.EqID
+     where e.mQty = 0
+    """
+    stenv.executeSql(update_sql)    
+}
+
+
+
+
+

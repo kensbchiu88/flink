@@ -1,0 +1,101 @@
+%flink.bsql(jobName="dim_scada_equipment")
+
+drop table if exists source;
+create table source (
+    `"Id"` int NOT NULL,
+	`"SN"` int NULL,
+	`"IsShow"` boolean NULL,
+	`"isLogisticalMac"` boolean NULL,
+	`"isCheckMac"` boolean NULL,
+	`"EquipNo"` varchar NULL,
+	`"StationId"` int NULL,
+	`"Equipname"` varchar NULL,
+	`"EquipCode"` varchar NULL,
+	`"EqType"` int NULL,
+	`"PlcType"` int NULL,
+	`"Specification"` varchar NULL,
+	`"IPAddess"` varchar NULL,
+	`"Port"` varchar NULL,
+	t_period double NULL,
+	`"SupplierId"` varchar NULL,
+	`"UseDate"` date NULL,
+	`"Remart"` varchar NULL,
+	`"DataDate"` timestamp NULL,
+	`"IsGetData"` boolean NULL,
+	`"IsOk"` boolean NULL,
+	`"CheckoutAddess"` varchar NULL,
+	`"OrganizeCode"` varchar NULL,
+	`"DbAsyncIp"` varchar NULL,
+	`"CreatePerson"` varchar NULL,
+	`"UpdatePerson"` varchar NULL,
+	`"UpdateDatetime"` timestamp NULL,
+	`"Dvv_Url"` varchar NULL,
+	`"Brand"` varchar NULL,
+	`"ManufacturingNo"` varchar NULL,
+	`"Epower"` varchar NULL,
+	`"PowerSupply"` varchar NULL,
+	`"PropertyNo"` varchar NULL,
+	`"ExpandAttribute"` varchar NULL,
+	`"SendEmailStates"` varchar NULL,
+	`"DPW"` varchar NULL,
+	`"PSW"` varchar NULL,
+	`"Feqid"` int NULL,
+    primary key (`"Id"`) not enforced
+) with (
+   'connector' = 'jdbc'
+   ,'url' = 'jdbc:postgresql://dmp-postgres-30100:5432/ods'
+   ,'table-name' = 'scada."Equipments"'
+   ,'username' = 'admin'
+   ,'password' = 'admin'
+);
+
+
+drop table if exists destination;
+create table destination (
+    --id integer,
+	source_id int NOT NULL,
+	sn int NULL,
+	is_show boolean NULL,
+	is_logistical_mac boolean NULL,
+	is_check_mac boolean NULL,
+	organization_code varchar NULL,
+	station_id int NULL,
+	name varchar NULL,
+	alias varchar NULL,
+	equipment_type int NULL,
+	plc_type int NULL,
+	specification varchar NULL,
+	ip_addess varchar NULL,
+	port varchar NULL,
+	t_period double NULL,
+	supplier_id varchar NULL,
+	use_date date NULL,
+	remark varchar NULL,
+	data_date timestamp NULL,
+	line_organization_code varchar NULL,
+	db_async_ip varchar NULL,
+	dvv_url varchar NULL,
+	brand varchar NULL,
+	manufacturing_no varchar NULL,
+	e_power varchar NULL,
+	power_supply varchar NULL,
+	property_no varchar NULL,
+	zone varchar NOT NULL,
+	update_time timestamp NOT NULL,
+    primary key (source_id, zone) not enforced
+) with (
+   'connector' = 'jdbc'
+   ,'url' = 'jdbc:postgresql://dmp-postgres-30100:5432/dw'
+   ,'table-name' = 'dwd.dim_scada_equipment'
+   ,'username' = 'admin'
+   ,'password' = 'admin'
+);
+
+
+insert into destination 
+select `"Id"`, 	`"SN"`, `"IsShow"`, `"isLogisticalMac"`, `"isCheckMac"`, `"EquipNo"`, `"StationId"`, `"Equipname"`, `"EquipCode"`, `"EqType"`, `"PlcType"`, `"Specification"`, 
+       `"IPAddess"`, `"Port"`, t_period, `"SupplierId"`, `"UseDate"`, `"Remart"`, `"DataDate"`, `"OrganizeCode"`, `"DbAsyncIp"`,  `"Dvv_Url"`, `"Brand"`, `"ManufacturingNo"`, 
+       `"Epower"`, `"PowerSupply"`,  `"PropertyNo"`, 'TPE',  now()
+from source;
+
+select * from destination;

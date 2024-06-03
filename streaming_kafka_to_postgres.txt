@@ -1,0 +1,119 @@
+%flink.ssql(jobName="streaming_tj_oee")
+
+
+drop table if exists source;
+CREATE TABLE source (
+	ID integer NOT NULL,
+	ClassDate STRING NULL,
+	OrganizeCode STRING NULL,
+	lineid integer NULL,
+	ClassId integer NULL,
+	EquipNo integer NULL,
+	ZongtouruTime double NULL,
+	DangjiTime double NULL,
+	xiuxitime double NULL,
+	JhTingjiTime double NULL,
+	fuheTime double NULL,
+	JiadongTime double NULL,
+	mQty integer NULL,
+	mrate double NULL,
+	passqty integer NULL,
+	TimeJdl numeric(9,4) NULL,
+	PassqtyLv numeric(9,4) NULL,
+	XingnengJdl numeric(9,4) NULL,
+	OEE1 numeric(9,4) NULL,
+	OEE numeric(9,4) NULL,
+	frate double NULL,
+	TargetQty integer NULL,
+	EqID integer NULL,
+	EqSate integer NULL,
+	dDate STRING NULL,
+	WorkTime double NULL,
+	FaultTime double NULL,
+	WaitTime double NULL,
+	ShaltTime double NULL,
+	planProduce integer NULL,
+	yieldRate numeric(9,4) NULL,
+	badnessQty integer NULL,
+	Errorcode varchar NULL,
+	TT numeric(9,4) NULL,
+	InputQty integer NULL,
+	MoldErrorCode varchar NULL,
+	PRODUCTID varchar NULL,
+	MouldNo varchar NULL,
+	DCLMb double NULL,
+	SJLMb double NULL,
+	LVMb double NULL,
+	XLMb double NULL,
+	OperatorNo varchar NULL,
+	Message varchar NULL,
+	BTBA integer NULL,
+	WorkOrder varchar NULL
+) WITH (
+  'connector' = 'kafka',
+  'topic' = 'scada-tj_oee',
+  'properties.bootstrap.servers' = 'kafka-service:9092',
+  'properties.group.id' = 'dwd',
+  'scan.startup.mode' = 'group-offsets',
+  'format' = 'json'
+  --'json.timestamp-format.standard' = 'ISO-8601'
+);
+
+
+drop table if exists destination;
+create table destination (
+    source_id integer NOT NULL,
+	shift_date date NULL,
+	shift integer NULL,
+	total_time double NULL,
+	unplanned_stop_time double NULL,
+	break_time double NULL,
+	planned_stop_time double NULL,
+	planned_production_time double NULL,
+	run_time double NULL,
+	total_count integer NULL,
+	ideal_cycle_time double NULL,
+	good_count integer NULL,
+	availability numeric(9,4) NULL,
+	quality numeric(9,4) NULL,
+	performance numeric(9,4) NULL,
+	oee1 numeric(9,4) NULL,
+	oee numeric(9,4) NULL,
+	actual_cycle_time double NULL,
+	production_target integer NULL,
+	equipment_id integer NULL,
+	data_datetime timestamp NULL,
+	net_run_time double NULL,
+	fault_time double NULL,
+	wait_time double NULL,
+	shalt_time double NULL,
+	planned_production integer NULL,
+	achievement_rate numeric(9,4) NULL,
+	bad_count integer NULL,
+	input_count integer NULL,
+	product_id varchar NULL,
+	mould_no varchar NULL,
+	achievement_rate_target double NULL,
+	availability_target double NULL,
+	quality_target double NULL,
+	performance_target double NULL,
+    zone varchar NOT NULL,
+	update_time timestamp NOT NULL,
+    primary key (source_id, zone) not enforced
+) with (
+   'connector' = 'jdbc'
+   ,'url' = 'jdbc:postgresql://dmp-postgres-30100:5432/dw'
+   ,'table-name' = 'dwd.scada_tj_oee'
+   ,'username' = 'admin'
+   ,'password' = 'admin'
+);
+
+
+
+insert into destination(source_id, shift_date, shift, total_time, unplanned_stop_time, break_time, planned_stop_time, planned_production_time, run_time, total_count, ideal_cycle_time, good_count, availability, quality, performance, oee1, oee, actual_cycle_time, production_target, equipment_id, data_datetime, net_run_time, fault_time, wait_time, shalt_time, planned_production, achievement_rate, bad_count, input_count, product_id, mould_no, achievement_rate_target, availability_target, quality_target, performance_target, zone, update_time)
+select ID, TO_TIMESTAMP(replace(replace(ClassDate, 'T', ' '), 'Z' ,'' )),  ClassId, ZongtouruTime, DangjiTime, xiuxitime, JhTingjiTime, fuheTime, JiadongTime, mQty, mrate, passqty, TimeJdl, PassqtyLv, XingnengJdl, OEE1, OEE, frate, 
+    TargetQty, EqID, TIMESTAMPADD(HOUR, -8, TO_TIMESTAMP(replace(replace(dDate, 'T', ' '), 'Z' ,'' ))), WorkTime, FaultTime, WaitTime, ShaltTime, planProduce, yieldRate, badnessQty, InputQty, PRODUCTID, MouldNo, DCLMb, SJLMb, LVMb, XLMb, 'TPE', now()
+  from source;
+
+select * from source;
+--select count(*) from destination;
